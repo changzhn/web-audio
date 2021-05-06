@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>选择一个音源</title>
+</head>
+
+<body>
+    <form>
+        选择一个音源：
+        <div>
+            <input type="radio" id="createBufferSource" name="input" value="createBufferSource" checked>
+            <label for="createBufferSource">createBufferSource</label>
+        </div>
+
+        <div>
+            <input type="radio" id="createMediaElementSource" name="input" value="createMediaElementSource">
+            <label for="createMediaElementSource">createMediaElementSource</label>
+        </div>
+
+        <div>
+            <input type="radio" id="createMediaStreamSource" name="input" value="createMediaStreamSource">
+            <label for="createMediaStreamSource">createMediaStreamSource</label>
+        </div>
+
+        <div>
+            <input type="radio" id="createConstantSource" name="input" value="createConstantSource">
+            <label for="createConstantSource">createConstantSource</label>
+        </div>
+
+        <div>
+            <input disabled type="radio" id="createMediaStreamTrackSource" name="input" value="createMediaStreamTrackSource">
+            <label for="createMediaStreamTrackSource">createMediaStreamTrackSource chrome上并不存在这个方法</label>
+        </div>
+
+        <button type="submit">action</button>
+    </form>
+    <script src="./Controller.js"></script>
+    <script>
+        const mp3 = 'http://127.0.0.1:5500/public/tornado.mp3';
+        const form = document.querySelector('form')
+
+        class Demo1 {
+
+            constructor() {
+                this.audioContext = new AudioContext({ latencyHint: 'balanced' });
+                this.controller = new Controller();
+                this.initTime = 0;
+                this.gainNode = this.audioContext.createGain();
+                this.controller.createDom();
+
+                this._controllerHandler();
+            }
+
+            _controllerHandler() {
+                this.controller.on('gain-change', v => {
+                    this.gainNode.gain.value = v;
+                })
+            }
+
+            updateProgress() {
+                const delta = this.audioContext.currentTime - this.initTime;
+                this.controller.updateCurrent(delta);
+
+                setTimeout(this.updateProgress.bind(this), 1000);
+            }
+
+
+            async play(sourceNode) {
+                sourceNode.connect(this.gainNode);
+                this.gainNode.connect(this.audioContext.destination);
+                this.controller.updateGain(this.gainNode.gain.value);
+                // 调整播放倍速
+                // sourceNode.playbackRate.value = 2;
+                this.initTime = this.audioContext.currentTime;
+                this.updateProgress();
+            }
+        }
+
+        form.addEventListener('submit', e => {
+            e.preventDefault();
+            const data = new FormData(form);
+            for(const [, type] of data) {
+                console.log(type);
+                startWithOneType(type)
+                break;
+            }
+        })
+
+        async function startWithOneType(type) {
+            const demo = new Demo1();
+            const audioContext = demo.audioContext;
+            const controller = demo.controller;
+            let sourceNode = null;
+            switch(type) {
+                case 'createBufferSource':
+                    const musicArrayBuffer = await fetch(mp3).then(r => r.arrayBuffer());
+                    const decodedAudioData = await audioContext.decodeAudioData(musicArrayBuffer);
+                    controller.duration = decodedAudioData.duration;
+                    sourceNode = audioContext.createBufferSource();
+                    sourceNode.buffer = decodedAudioData;
+                    sourceNode.start(0);
+                    demo.play(sourceNode);
+                    break;
+                case 'createMediaElementSource':
+                    const audio = document.createElement('audio');
+                    audio.src = mp3;
+                    sourceNode = audioContext.createMediaElementSource(audio);
+                    audio.play();
+                    demo.play(sourceNode)
+                    break;
+                case 'createMediaStreamSource':
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    sourceNode = audioContext.createMediaStreamSource(stream);
+                    demo.play(sourceNode)
+                    break;
+                case 'createMediaStreamTrackSource':
+                    break;
+                case 'createConstantSource':
+                    sourceNode = audioContext.createConstantSource();
+                    sourceNode.start(0);
+                    demo.play(sourceNode)
+                    break;
+            }
+        }
+
+
+    </script>
+</body>
+
+</html>

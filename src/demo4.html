@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>使用AnalyserNode</title>
+</head>
+
+<body>
+    <button>action</button>
+    <canvas></canvas>
+    <script src="./Controller.js"></script>
+    <script>
+        const mp3 = 'http://127.0.0.1:5500/public/tornado.mp3';
+        const button = document.querySelector('button')
+        const canvas = document.querySelector('canvas')
+        const canvasCtx = canvas.getContext('2d');
+        const WIDTH = 300;
+        const HEIGHT = 150;
+        let bufferLength = 0;
+        let dataArray = [];
+
+        class Demo1 {
+
+            constructor() {
+                this.audioContext = new AudioContext({ latencyHint: 'balanced' });
+                this.controller = new Controller();
+                this.initTime = 0;
+            }
+
+            async start() {
+                this.controller.createDom();
+                const musicArrayBuffer = await this.getMp3ArrayBuffer(mp3);
+                const decodedAudioData = await this.decode(musicArrayBuffer);
+                this.controller.duration = decodedAudioData.duration;
+                this.play(decodedAudioData);
+            }
+
+            updateProgress() {
+                const delta = this.audioContext.currentTime - this.initTime;
+                this.controller.updateCurrent(delta);
+
+                setTimeout(this.updateProgress.bind(this), 1000);
+            }
+
+            /**
+            * @param {AudioBuffer} decodedAudioData
+            * @returns
+            */
+            async play(decodedAudioData) {
+                const sourceNode = this.audioContext.createBufferSource();
+                sourceNode.buffer = decodedAudioData;
+                const analyserNode = this.audioContext.createAnalyser();
+
+                this.analyser = analyserNode;
+                analyserNode.fftSize = 512;
+                bufferLength = analyserNode.fftSize;
+                dataArray = new Uint8Array(bufferLength);
+                analyserNode.getByteTimeDomainData(dataArray);
+
+                sourceNode.connect(analyserNode);
+                analyserNode.connect(this.audioContext.destination);
+                sourceNode.start(0);
+                // 调整播放倍速
+                // sourceNode.playbackRate.value = 2;
+                this.initTime = this.audioContext.currentTime;
+                this.updateProgress();
+                this.draw();
+            }
+
+            /**
+             * @param {string} url
+             * @returns {ArrayBuffer}
+             */
+            async getMp3ArrayBuffer(url) {
+                return fetch(url).then(r => r.arrayBuffer());
+            }
+
+            /**
+             * @param {ArrayBuffer} arrayBuffer
+             * @returns {AudioBuffer}
+             */
+            async decode(arrayBuffer) {
+                return this.audioContext.decodeAudioData(arrayBuffer);
+            }
+
+            draw() {
+                requestAnimationFrame(this.draw.bind(this));
+
+                this.analyser.getByteTimeDomainData(dataArray);
+
+                canvasCtx.fillStyle = 'rgb(200, 200, 200)';
+                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+
+                canvasCtx.lineWidth = 2;
+                canvasCtx.strokeStyle = 'rgb(0, 0, 0)';
+
+                canvasCtx.beginPath();
+
+                var sliceWidth = WIDTH * 1.0 / bufferLength;
+                var x = 0;
+
+                for (var i = 0; i < bufferLength; i++) {
+
+                    var v = dataArray[i] / 128.0;
+                    var y = v * HEIGHT / 2;
+
+                    if (i === 0) {
+                        canvasCtx.moveTo(x, y);
+                    } else {
+                        canvasCtx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                }
+
+                canvasCtx.lineTo(canvas.width, canvas.height / 2);
+                canvasCtx.stroke();
+            }
+        }
+
+        button.onclick = () => new Demo1().start();
+
+
+    </script>
+</body>
+
+</html>

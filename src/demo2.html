@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>使用gainNode</title>
+</head>
+
+<body>
+    <button>action</button>
+    <script src="./Controller.js"></script>
+    <script>
+        const mp3 = 'http://127.0.0.1:5500/public/tornado.mp3';
+        const button = document.querySelector('button')
+
+        class Demo1 {
+
+            constructor() {
+                this.audioContext = new AudioContext({ latencyHint: 'balanced' });
+                this.controller = new Controller();
+                this.initTime = 0;
+                this.gainNode = this.audioContext.createGain();
+
+                this._controllerHandler();
+            }
+
+            _controllerHandler() {
+                this.controller.on('gain-change', v => {
+                    this.gainNode.gain.value = v;
+                })
+            }
+
+            async start() {
+                this.controller.createDom();
+                const musicArrayBuffer = await this.getMp3ArrayBuffer(mp3);
+                const decodedAudioData = await this.decode(musicArrayBuffer);
+                this.controller.duration = decodedAudioData.duration;
+                this.play(decodedAudioData);
+            }
+
+            updateProgress() {
+                const delta = this.audioContext.currentTime - this.initTime;
+                this.controller.updateCurrent(delta);
+
+                setTimeout(this.updateProgress.bind(this), 1000);
+            }
+
+             /**
+             * @param {AudioBuffer} decodedAudioData
+             * @returns
+             */
+            async play(decodedAudioData) {
+                const sourceNode = this.audioContext.createBufferSource();
+                sourceNode.buffer = decodedAudioData;
+                sourceNode.connect(this.gainNode);
+                this.gainNode.connect(this.audioContext.destination);
+                sourceNode.start(0);
+                this.controller.updateGain(this.gainNode.gain.value);
+                // 调整播放倍速
+                // sourceNode.playbackRate.value = 2;
+                this.initTime = this.audioContext.currentTime;
+                this.updateProgress();
+            }
+
+            /**
+             * @param {string} url
+             * @returns {ArrayBuffer}
+             */
+            async getMp3ArrayBuffer(url) {
+                return fetch(url).then(r => r.arrayBuffer());
+            }
+
+            /**
+             * @param {ArrayBuffer} arrayBuffer
+             * @returns {AudioBuffer}
+             */
+            async decode(arrayBuffer) {
+                return this.audioContext.decodeAudioData(arrayBuffer);
+            }
+        }
+
+        button.onclick = () => {
+            window.d = new Demo1();
+            d.start();
+        }
+
+
+    </script>
+</body>
+
+</html>
